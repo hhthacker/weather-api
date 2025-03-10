@@ -1,0 +1,1 @@
+### playing around with openweather api, redis, shuttle, and rust. nothing to see here :)
