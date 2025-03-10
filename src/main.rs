@@ -3,7 +3,7 @@ use reqwest::Client;
 use serde_json::Value;
 use std::env;
 use std::net::SocketAddr;
-use redis::{aio::Connection, AsyncCommands, Client as RedisClient};
+use redis::{aio::MultiplexedConnection, AsyncCommands, Client as RedisClient};
 use dotenv::dotenv;
 
 #[tokio::main]
@@ -40,7 +40,8 @@ async fn get_weather(axum::extract::Path(city): axum::extract::Path<String>) -> 
     let redis_client = RedisClient::open("redis://127.0.0.1/").unwrap();
 
     #[allow(deprecated)]
-    let mut con: Connection = redis_client.get_async_connection().await.unwrap();
+    let mut con: MultiplexedConnection = redis_client.get_multiplexed_async_connection().await.unwrap();
+
 
     let key = format!("weather_requests:{}", city);
     let _: () = con.incr(&key, 1).await.unwrap();
