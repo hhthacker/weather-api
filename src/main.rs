@@ -1,28 +1,24 @@
 use axum::{routing::get, Router};
 use reqwest::Client;
 use serde_json::Value;
-use std::env;
-use std::net::SocketAddr;
 use redis::{aio::MultiplexedConnection, AsyncCommands, Client as RedisClient};
-use dotenv::dotenv;
+use shuttle_axum::ShuttleAxum;
+use shuttle_secrets::{SecretStore, Secrets};
+use std::net::SocketAddr;
 
-#[tokio::main]
-async fn main() {
-    dotenv().ok();
+#[shuttle_runtime::main]
+async fn main(#[Secrets] secrets: SecretStore) -> ShuttleAxum {
+    let api_key = secrets.get("WEATHER_API_KEY").expect("API key missing");
 
-    let app = Router::new().route("/weather/:city", get(get_weather));
+    let app = Router::new().route("/weather/:city", get(move |path| get_weather(path, api_key.clone())));
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
-    println!("Listening on {}", addr);
+    let addr = SocketAddr::from(([0, 0, 0, 0], 8000));
+    println!("Starting server on {}", addr);
 
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    Ok(app.into())
 }
 
-async fn get_weather(axum::extract::Path(city): axum::extract::Path<String>) -> String {
-    let api_key = env::var("WEATHER_API_KEY").expect("WEATHER_API_KEY must be set");
+async fn get_weather(axum::extract::Path(city): axum::extract::Path<String>, api_key: String) -> String {
     let url = format!(
         "https://api.openweathermap.org/data/2.5/weather?q={}&appid={}",
         city, api_key
@@ -38,14 +34,11 @@ async fn get_weather(axum::extract::Path(city): axum::extract::Path<String>) -> 
         .unwrap();
 
     let redis_client = RedisClient::open("redis://127.0.0.1/").unwrap();
-
-    #[allow(deprecated)]
     let mut con: MultiplexedConnection = redis_client.get_multiplexed_async_connection().await.unwrap();
-
 
     let key = format!("weather_requests:{}", city);
     let _: () = con.incr(&key, 1).await.unwrap();
-    let _: () = con.expire(&key, 60).await.unwrap(); // Reset count every 60 seconds
+    let _: () = con.expire(&key, 60).await.unwrap();
 
     response.to_string()
 }
